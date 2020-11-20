@@ -1,7 +1,12 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/wflysnow/my-sample-operator/pkg/apis/samplecontroller/v1alpha1"
+)
 
 func main() {
-	fmt.Println("this is sample-operator project")
+	temVar := &v1alpha1.Foo{}
+	fmt.Println("this is sample-operator project #v", temVar)
 }
