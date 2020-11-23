@@ -25,6 +25,8 @@ golang.org/x/text/unicode/norm
 gopkg.in/inf.v0
 # gopkg.in/yaml.v2 v2.2.8
 gopkg.in/yaml.v2
+# k8s.io/api v0.0.0-20201114085527-4a626d306b98
+## explicit
 # k8s.io/apimachinery v0.0.0-20201114085355-859536f6dc9b
 ## explicit
 k8s.io/apimachinery/pkg/api/resource
@@ -48,7 +50,12 @@ k8s.io/apimachinery/pkg/util/validation
 k8s.io/apimachinery/pkg/util/validation/field
 k8s.io/apimachinery/pkg/watch
 k8s.io/apimachinery/third_party/forked/golang/reflect
+# k8s.io/client-go v0.0.0-20201114085741-77eda6a9395b
+## explicit
+# k8s.io/code-generator v0.0.0-20201114085218-0843e0f44fb3
+## explicit
 # k8s.io/klog/v2 v2.4.0
+## explicit
 k8s.io/klog/v2
 # sigs.k8s.io/structured-merge-diff/v4 v4.0.2
 sigs.k8s.io/structured-merge-diff/v4/value
