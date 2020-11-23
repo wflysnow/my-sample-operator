@@ -7,6 +7,7 @@
 package v1alpha1
 
 import (
+	"context"
 	samplecontrollerv1alpha1 "my-sample-operator/pkg/apis/samplecontroller/v1alpha1"
 	versioned "my-sample-operator/pkg/generated/clientset/versioned"
 	internalinterfaces "my-sample-operator/pkg/generated/informers/externalversions/internalinterfaces"
@@ -49,13 +50,13 @@ func NewFilteredFooInformer(client versioned.Interface, namespace string, resync
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.SamplecontrollerV1alpha1().Foos(namespace).List(options)
+				return client.SamplecontrollerV1alpha1().Foos(namespace).List(context.TODO(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.SamplecontrollerV1alpha1().Foos(namespace).Watch(options)
+				return client.SamplecontrollerV1alpha1().Foos(namespace).Watch(context.TODO(), options)
 			},
 		},
 		&samplecontrollerv1alpha1.Foo{},
