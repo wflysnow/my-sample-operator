@@ -33,3 +33,12 @@ func TestClient(t *testing.T) {
 	fmt.Println(foo, err)
 
 }
+
+func TestWaitUtil(t *testing.T) {
+	stopCh := make(chan struct{})
+	i := 0
+	go wait.Util(func() {
+		fmt.Printf("----%d----", i)
+		i++
+	}, time.Second, stopCh)
+}
