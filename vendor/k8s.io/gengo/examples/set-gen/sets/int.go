@@ -28,7 +28,7 @@ type Int map[int]Empty
 
 // NewInt creates a Int from a list of values.
 func NewInt(items ...int) Int {
-	ss := make(Int, len(items))
+	ss := Int{}
 	ss.Insert(items...)
 	return ss
 }
@@ -46,19 +46,17 @@ func IntKeySet(theMap interface{}) Int {
 }
 
 // Insert adds items to the set.
-func (s Int) Insert(items ...int) Int {
+func (s Int) Insert(items ...int) {
 	for _, item := range items {
 		s[item] = Empty{}
 	}
-	return s
 }
 
 // Delete removes all items from the set.
-func (s Int) Delete(items ...int) Int {
+func (s Int) Delete(items ...int) {
 	for _, item := range items {
 		delete(s, item)
 	}
-	return s
 }
 
 // Has returns true if and only if item is contained in the set.

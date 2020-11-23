@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"go/ast"
 	"go/build"
-	"go/constant"
 	"go/parser"
 	"go/token"
 	tc "go/types"
@@ -29,12 +28,11 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
 	"k8s.io/gengo/types"
-	"k8s.io/klog/v2"
+	"k8s.io/klog"
 )
 
 // This clarifies when a pkg path has been canonicalized.
@@ -44,9 +42,6 @@ type importPathString string
 // about, then constructs the type source data.
 type Builder struct {
 	context *build.Context
-
-	// If true, include *_test.go
-	IncludeTestFiles bool
 
 	// Map of package names to more canonical information about the package.
 	// This might hold the same value for multiple names, e.g. if someone
@@ -229,16 +224,12 @@ func (b *Builder) AddDirRecursive(dir string) error {
 		klog.Warningf("Ignoring directory %v: %v", dir, err)
 	}
 
-	// filepath.Walk does not follow symlinks. We therefore evaluate symlinks and use that with
-	// filepath.Walk.
-	realPath, err := filepath.EvalSymlinks(b.buildPackages[dir].Dir)
-	if err != nil {
-		return err
-	}
-
+	// filepath.Walk includes the root dir, but we already did that, so we'll
+	// remove that prefix and rebuild a package import path.
+	prefix := b.buildPackages[dir].Dir
 	fn := func(filePath string, info os.FileInfo, err error) error {
 		if info != nil && info.IsDir() {
-			rel := filepath.ToSlash(strings.TrimPrefix(filePath, realPath))
+			rel := filepath.ToSlash(strings.TrimPrefix(filePath, prefix))
 			if rel != "" {
 				// Make a pkg path.
 				pkg := path.Join(string(canonicalizeImportPath(b.buildPackages[dir].ImportPath)), rel)
@@ -251,7 +242,7 @@ func (b *Builder) AddDirRecursive(dir string) error {
 		}
 		return nil
 	}
-	if err := filepath.Walk(realPath, fn); err != nil {
+	if err := filepath.Walk(b.buildPackages[dir].Dir, fn); err != nil {
 		return err
 	}
 	return nil
@@ -313,17 +304,11 @@ func (b *Builder) addDir(dir string, userRequested bool) error {
 		b.absPaths[pkgPath] = buildPkg.Dir
 	}
 
-	files := []string{}
-	files = append(files, buildPkg.GoFiles...)
-	if b.IncludeTestFiles {
-		files = append(files, buildPkg.TestGoFiles...)
-	}
-
-	for _, file := range files {
-		if !strings.HasSuffix(file, ".go") {
+	for _, n := range buildPkg.GoFiles {
+		if !strings.HasSuffix(n, ".go") {
 			continue
 		}
-		absPath := filepath.Join(buildPkg.Dir, file)
+		absPath := filepath.Join(buildPkg.Dir, n)
 		data, err := ioutil.ReadFile(absPath)
 		if err != nil {
 			return fmt.Errorf("while loading %q: %v", absPath, err)
@@ -334,13 +319,6 @@ func (b *Builder) addDir(dir string, userRequested bool) error {
 		}
 	}
 	return nil
-}
-
-// regexErrPackageNotFound helps test the expected error for not finding a package.
-var regexErrPackageNotFound = regexp.MustCompile(`^unable to import ".*?":.*`)
-
-func isErrPackageNotFound(err error) bool {
-	return regexErrPackageNotFound.MatchString(err.Error())
 }
 
 // importPackage is a function that will be called by the type check package when it
@@ -365,11 +343,6 @@ func (b *Builder) importPackage(dir string, userRequested bool) (*tc.Package, er
 
 		// Add it.
 		if err := b.addDir(dir, userRequested); err != nil {
-			if isErrPackageNotFound(err) {
-				klog.V(6).Info(err)
-				return nil, nil
-			}
-
 			return nil, err
 		}
 
@@ -562,10 +535,6 @@ func (b *Builder) findTypesIn(pkgPath importPathString, u *types.Universe) error
 		if ok && !tv.IsField() {
 			b.addVariable(*u, nil, tv)
 		}
-		tconst, ok := obj.(*tc.Const)
-		if ok {
-			b.addConstant(*u, nil, tconst)
-		}
 	}
 
 	importedPkgs := []string{}
@@ -591,7 +560,7 @@ func (b *Builder) importWithMode(dir string, mode build.ImportMode) (*build.Pack
 	if err != nil {
 		return nil, fmt.Errorf("unable to get current directory: %v", err)
 	}
-	buildPkg, err := b.context.Import(filepath.ToSlash(dir), cwd, mode)
+	buildPkg, err := b.context.Import(dir, cwd, mode)
 	if err != nil {
 		return nil, err
 	}
@@ -764,11 +733,7 @@ func (b *Builder) walkType(u types.Universe, useName *types.Name, in tc.Type) *t
 			if out.Methods == nil {
 				out.Methods = map[string]*types.Type{}
 			}
-			method := t.Method(i)
-			name := tcNameToName(method.String())
-			mt := b.walkType(u, &name, method.Type())
-			mt.CommentLines = splitLines(b.priorCommentLines(method.Pos(), 1).Text())
-			out.Methods[method.Name()] = mt
+			out.Methods[t.Method(i).Name()] = b.walkType(u, nil, t.Method(i).Type())
 		}
 		return out
 	case *tc.Named:
@@ -800,11 +765,7 @@ func (b *Builder) walkType(u types.Universe, useName *types.Name, in tc.Type) *t
 				if out.Methods == nil {
 					out.Methods = map[string]*types.Type{}
 				}
-				method := t.Method(i)
-				name := tcNameToName(method.String())
-				mt := b.walkType(u, &name, method.Type())
-				mt.CommentLines = splitLines(b.priorCommentLines(method.Pos(), 1).Text())
-				out.Methods[method.Name()] = mt
+				out.Methods[t.Method(i).Name()] = b.walkType(u, nil, t.Method(i).Type())
 			}
 		}
 		return out
@@ -838,33 +799,6 @@ func (b *Builder) addVariable(u types.Universe, useName *types.Name, in *tc.Var)
 	out := u.Variable(name)
 	out.Kind = types.DeclarationOf
 	out.Underlying = b.walkType(u, nil, in.Type())
-	return out
-}
-
-func (b *Builder) addConstant(u types.Universe, useName *types.Name, in *tc.Const) *types.Type {
-	name := tcVarNameToName(in.String())
-	if useName != nil {
-		name = *useName
-	}
-	out := u.Constant(name)
-	out.Kind = types.DeclarationOf
-	out.Underlying = b.walkType(u, nil, in.Type())
-
-	var constval string
-
-	// For strings, we use `StringVal()` to get the un-truncated,
-	// un-quoted string. For other values, `.String()` is preferable to
-	// get something relatively human readable (especially since for
-	// floating point types, `ExactString()` will generate numeric
-	// expressions using `big.(*Float).Text()`.
-	switch in.Val().Kind() {
-	case constant.String:
-		constval = constant.StringVal(in.Val())
-	default:
-		constval = in.Val().String()
-	}
-
-	out.ConstValue = &constval
 	return out
 }
 

@@ -28,17 +28,19 @@ import (
 	"k8s.io/code-generator/cmd/client-gen/path"
 	clientgentypes "k8s.io/code-generator/cmd/client-gen/types"
 	codegennamer "k8s.io/code-generator/pkg/namer"
-	genutil "k8s.io/code-generator/pkg/util"
 	"k8s.io/gengo/args"
 	"k8s.io/gengo/generator"
 	"k8s.io/gengo/namer"
 	"k8s.io/gengo/types"
 
-	"k8s.io/klog/v2"
+	"k8s.io/klog"
 )
 
 // NameSystems returns the name system used by the generators in this package.
-func NameSystems(pluralExceptions map[string]string) namer.NameSystems {
+func NameSystems() namer.NameSystems {
+	pluralExceptions := map[string]string{
+		"Endpoints": "Endpoints",
+	}
 	lowercaseNamer := namer.NewAllLowercasePluralNamer(pluralExceptions)
 
 	publicNamer := &ExceptionNamer{
@@ -280,7 +282,7 @@ func applyGroupOverrides(universe types.Universe, customArgs *clientgenargs.Cust
 	// Create a map from "old GV" to "new GV" so we know what changes we need to make.
 	changes := make(map[clientgentypes.GroupVersion]clientgentypes.GroupVersion)
 	for gv, inputDir := range customArgs.GroupVersionPackages() {
-		p := universe.Package(genutil.Vendorless(inputDir))
+		p := universe.Package(inputDir)
 		if override := types.ExtractCommentTags("+", p.Comments)["groupName"]; override != nil {
 			newGV := clientgentypes.GroupVersion{
 				Group:   clientgentypes.Group(override[0]),
